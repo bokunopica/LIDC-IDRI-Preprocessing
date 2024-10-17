@@ -265,7 +265,7 @@ class MakeDataSet:
                 Path(patient_clean_dir_mask).mkdir(parents=True, exist_ok=True)
                 # There are patients that don't have nodule at all. Meaning, its a clean dataset. We need to use this for validation
                 for slice in range(vol.shape[2]):
-                    if slice > 50:
+                    if slice > 50: # 为什么是50？
                         break
                     lung_segmented_np_array = segment_lung(vol[:, :, slice])
                     lung_segmented_np_array[lung_segmented_np_array == -0] = 0
@@ -323,7 +323,6 @@ if __name__ == "__main__":
     # LIDC_IDRI_list= [f for f in os.listdir(DICOM_DIR) if not f.startswith('.')]
     LIDC_IDRI_list = [f for f in os.listdir(DICOM_DIR) if f.startswith("LIDC-IDRI-")]
     LIDC_IDRI_list.sort()
-    LIDC_IDRI_list = LIDC_IDRI_list[26:]
 
     test = MakeDataSet(
         LIDC_IDRI_list,
