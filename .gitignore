@@ -1,0 +1,5 @@
+.venv
+venv
+*.pyc
+*.npy
+meta_info.csv

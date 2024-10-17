@@ -97,6 +97,7 @@ class MakeDataSet:
             pid = patient #LIDC-IDRI-0001~
             scan = pl.query(pl.Scan).filter(pl.Scan.patient_id == pid).first()
             nodules_annotation = scan.cluster_annotations()
+            # TODO annotation 提取医生标注的几个特征
             vol = scan.to_volume()
             print("Patient ID: {} Dicom Shape: {} Number of Annotated Nodules: {}".format(pid,vol.shape,len(nodules_annotation)))
 
@@ -105,6 +106,8 @@ class MakeDataSet:
             Path(patient_image_dir).mkdir(parents=True, exist_ok=True)
             Path(patient_mask_dir).mkdir(parents=True, exist_ok=True)
 
+            # nodules_annotation: [[Annotation(id=84,scan_id=12), Annotation(id=85,scan_id=12), Annotation(id=86,scan_id=12), Annotation(id=87,scan_id=12)]]
+            # len(nodules_annotation): 患者被标记的结节数量
             if len(nodules_annotation) > 0:
                 # Patients with nodules
                 for nodule_idx, nodule in enumerate(nodules_annotation):
@@ -112,8 +115,10 @@ class MakeDataSet:
                 # This current for loop iterates over total number of nodules in a single patient
                     mask, cbbox, masks = consensus(nodule,self.c_level,self.padding)
                     lung_np_array = vol[cbbox]
-
                     # We calculate the malignancy information
+                    print(nodule)
+                    print(nodule[0])
+                    print(nodule[0].__dict__)
                     malignancy, cancer_label = self.calculate_malignancy(nodule)
 
                     for nodule_slice in range(mask.shape[2]):
@@ -122,6 +127,10 @@ class MakeDataSet:
                         if np.sum(mask[:,:,nodule_slice]) <= self.mask_threshold:
                             continue
                         # Segment Lung part only
+                        print("!!!!!!!")
+                        print(mask.shape)
+                        print(nodule_slice)
+                        print("!!!!!!!")
                         lung_segmented_np_array = segment_lung(lung_np_array[:,:,nodule_slice])
                         # I am not sure why but some values are stored as -0. <- this may result in datatype error in pytorch training # Not sure
                         lung_segmented_np_array[lung_segmented_np_array==-0] =0
@@ -129,11 +138,14 @@ class MakeDataSet:
                         # Naming of each file: NI= Nodule Image, MA= Mask Original
                         nodule_name = "{}_NI{}_slice{}".format(pid[-4:],prefix[nodule_idx],prefix[nodule_slice])
                         mask_name = "{}_MA{}_slice{}".format(pid[-4:],prefix[nodule_idx],prefix[nodule_slice])
+                        # TODO meta info 其他信息
                         meta_list = [pid[-4:],nodule_idx,prefix[nodule_slice],nodule_name,mask_name,malignancy,cancer_label,False]
 
                         self.save_meta(meta_list)
                         np.save(patient_image_dir / nodule_name,lung_segmented_np_array)
                         np.save(patient_mask_dir / mask_name,mask[:,:,nodule_slice])
+                        break
+                    break
             else:
                 print("Clean Dataset",pid)
                 patient_clean_dir_image = CLEAN_DIR_IMAGE / pid
@@ -155,9 +167,8 @@ class MakeDataSet:
                     self.save_meta(meta_list)
                     np.save(patient_clean_dir_image / nodule_name, lung_segmented_np_array)
                     np.save(patient_clean_dir_mask / mask_name, lung_mask)
-
-
-
+            break
+                    
         print("Saved Meta data")
         self.meta.to_csv(self.meta_path+'meta_info.csv',index=False)
 
@@ -165,7 +176,8 @@ class MakeDataSet:
 
 if __name__ == '__main__':
     # I found out that simply using os.listdir() includes the gitignore file 
-    LIDC_IDRI_list= [f for f in os.listdir(DICOM_DIR) if not f.startswith('.')]
+    # LIDC_IDRI_list= [f for f in os.listdir(DICOM_DIR) if not f.startswith('.')]
+    LIDC_IDRI_list= [f for f in os.listdir(DICOM_DIR) if f.startswith('LIDC-IDRI-')]
     LIDC_IDRI_list.sort()
 
 
