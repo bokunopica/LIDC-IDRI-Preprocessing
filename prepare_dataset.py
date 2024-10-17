@@ -52,6 +52,7 @@ META_COLS = [
     "lobulation",
     "spiculation",
     "texture",
+    "slice_thickness",
 ]
 
 
@@ -248,6 +249,7 @@ class MakeDataSet:
                             lobulation,
                             spiculation,
                             texture,
+                            scan.slice_thickness,
                         ]
 
                         self.save_meta(meta_list)
@@ -270,13 +272,21 @@ class MakeDataSet:
                     lung_mask = np.zeros_like(lung_segmented_np_array)
 
                     # CN= CleanNodule, CM = CleanMask
-                    nodule_name = "{}/{}_CN001_slice{}".format(
-                        pid,
+                    # nodule_name = "{}/{}_CN001_slice{}".format(
+                    #     pid,
+                    #     pid[-4:],
+                    #     prefix[slice],
+                    # )
+                    # mask_name = "{}/{}_CM001_slice{}".format(
+                    #     pid,
+                    #     pid[-4:],
+                    #     prefix[slice],
+                    # )
+                    nodule_name = "{}_CN001_slice{}".format(
                         pid[-4:],
                         prefix[slice],
                     )
-                    mask_name = "{}/{}_CM001_slice{}".format(
-                        pid,
+                    mask_name = "{}_CM001_slice{}".format(
                         pid[-4:],
                         prefix[slice],
                     )
@@ -297,6 +307,7 @@ class MakeDataSet:
                         0,
                         0,
                         0,
+                        scan.slice_thickness
                     ]
                     self.save_meta(meta_list)
                     np.save(
@@ -312,6 +323,7 @@ if __name__ == "__main__":
     # LIDC_IDRI_list= [f for f in os.listdir(DICOM_DIR) if not f.startswith('.')]
     LIDC_IDRI_list = [f for f in os.listdir(DICOM_DIR) if f.startswith("LIDC-IDRI-")]
     LIDC_IDRI_list.sort()
+    LIDC_IDRI_list = LIDC_IDRI_list[26:]
 
     test = MakeDataSet(
         LIDC_IDRI_list,
