@@ -107,7 +107,7 @@ class MakeDataSet:
         )
         self.meta = self.meta.append(tmp, ignore_index=True)
 
-    def prepare_dataset(self):
+    def prepare_dataset(self, seg_lung=True):
         # This is to name each image and mask
         prefix = [str(x).zfill(3) for x in range(1000)]
 
@@ -213,12 +213,15 @@ class MakeDataSet:
                         # There are some mask sizes that are too small. These may hinder training.
                         if np.sum(mask[:, :, nodule_slice]) <= self.mask_threshold:
                             continue
-                        # Segment Lung part only
-                        lung_segmented_np_array = segment_lung(
-                            lung_np_array[:, :, nodule_slice]
-                        )
-                        # I am not sure why but some values are stored as -0. <- this may result in datatype error in pytorch training # Not sure
-                        lung_segmented_np_array[lung_segmented_np_array == -0] = 0
+                        if seg_lung:
+                            # Segment Lung part only
+                            lung_segmented_np_array = segment_lung(
+                                lung_np_array[:, :, nodule_slice]
+                            )
+                            # I am not sure why but some values are stored as -0. <- this may result in datatype error in pytorch training # Not sure
+                            lung_segmented_np_array[lung_segmented_np_array == -0] = 0
+                        else:
+                            lung_segmented_np_array = lung_np_array[:,:,nodule_slice]
                         # This itereates through the slices of a single nodule
                         # Naming of each file: NI= Nodule Image, MA= Mask Original
                         nodule_name = "{}_NI{}_slice{}".format(
@@ -267,9 +270,13 @@ class MakeDataSet:
                 for slice in range(vol.shape[2]):
                     if slice > 50: # 为什么是50？
                         break
-                    lung_segmented_np_array = segment_lung(vol[:, :, slice])
-                    lung_segmented_np_array[lung_segmented_np_array == -0] = 0
-                    lung_mask = np.zeros_like(lung_segmented_np_array)
+                    if seg_lung:
+                        lung_segmented_np_array = segment_lung(vol[:, :, slice])
+                        lung_segmented_np_array[lung_segmented_np_array == -0] = 0
+                        lung_mask = np.zeros_like(lung_segmented_np_array)
+                    else:
+                        lung_segmented_np_array = vol[:, :, slice]
+                        lung_mask = np.zeros_like(lung_segmented_np_array)
 
                     # CN= CleanNodule, CM = CleanMask
                     # nodule_name = "{}/{}_CN001_slice{}".format(
@@ -335,4 +342,4 @@ if __name__ == "__main__":
         padding,
         confidence_level,
     )
-    test.prepare_dataset()
+    test.prepare_dataset(seg_lung=False)
