@@ -10,7 +10,7 @@ import pylidc as pl
 from tqdm import tqdm
 from statistics import median_high
 
-from utils import is_dir_path, segment_lung
+from utils import is_dir_path, segment_lung, ct_img_preprocess
 from pylidc.utils import consensus
 from PIL import Image
 
@@ -219,9 +219,9 @@ class MakeDataSet:
                                 lung_np_array[:, :, nodule_slice]
                             )
                             # I am not sure why but some values are stored as -0. <- this may result in datatype error in pytorch training # Not sure
-                            lung_segmented_np_array[lung_segmented_np_array == -0] = 0
                         else:
-                            lung_segmented_np_array = lung_np_array[:,:,nodule_slice]
+                            lung_segmented_np_array = ct_img_preprocess(lung_np_array[:,:,nodule_slice])
+                        lung_segmented_np_array[lung_segmented_np_array == -0] = 0
                         # This itereates through the slices of a single nodule
                         # Naming of each file: NI= Nodule Image, MA= Mask Original
                         nodule_name = "{}_NI{}_slice{}".format(
@@ -275,7 +275,7 @@ class MakeDataSet:
                         lung_segmented_np_array[lung_segmented_np_array == -0] = 0
                         lung_mask = np.zeros_like(lung_segmented_np_array)
                     else:
-                        lung_segmented_np_array = vol[:, :, slice]
+                        lung_segmented_np_array = ct_img_preprocess(vol[:, :, slice])
                         lung_mask = np.zeros_like(lung_segmented_np_array)
 
                     # CN= CleanNodule, CM = CleanMask
