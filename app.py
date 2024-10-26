@@ -1,9 +1,10 @@
-import streamlit as st
-import numpy as np
 import os
+import numpy as np
+import streamlit as st
+from utils import mask_find_bboxs, draw_bboxs
 
 
-DATA_ROOT = "C:/data/lung-nodules-classification/Processed-LIDC-lung-seg"
+DATA_ROOT = "E:/Processed-LIDC-full-lung"
 # 根目录
 root_dir = f"{DATA_ROOT}/Image/"
 
@@ -45,6 +46,8 @@ if selected_dir != st.session_state.get("selected_dir"):
         mask_image = np.load(
             os.path.join(image_dir, path).replace("Image", "Mask").replace("NI", "MA")
         )
+        # mask转为bounding box
+        bboxs = mask_find_bboxs(mask_image)
         # # 创建颜色掩码（假设掩码为二值图像）
         colored_mask = np.zeros((*mask_image.shape, 3), dtype=np.uint8)
         colored_mask[mask_image > 0] = [255, 0, 0]  # 红色掩码
@@ -57,6 +60,8 @@ if selected_dir != st.session_state.get("selected_dir"):
         # # 设置红色掩码的透明度
         # alpha = 128  # 透明度范围 0-255
         # overlay[mask_image > 0] = [255, 0, 0]  # 红色
+        draw_bboxs(colored_mask, bboxs)
+        draw_bboxs(overlay, bboxs)
 
         images.append(image)
         mask_images.append(colored_mask)

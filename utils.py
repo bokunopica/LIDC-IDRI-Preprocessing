@@ -1,6 +1,7 @@
 import argparse
 import os
 import numpy as np
+import cv2
 
 from medpy.filter.smoothing import anisotropic_diffusion
 from scipy.ndimage import median_filter
@@ -66,3 +67,26 @@ def segment_lung(img):
 
 def count_params(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def mask_find_bboxs(mask):
+    # 确保 mask 是单通道的
+    if len(mask.shape) == 3:
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    
+    # 将布尔类型转换为 uint8 类型
+    if mask.dtype == bool:
+        mask = mask.astype(np.uint8) * 255  # 转换为二值图像，True -> 255, False -> 0
+
+    # 确保 mask 是二值图像
+    _, binary_mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
+
+    retval, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask, connectivity=8)
+    stats = stats[stats[:, 4].argsort()]
+    return stats[:-1]  # 排除最外层的连通图
+
+
+def draw_bboxs(image, bboxs):
+    for bbox in bboxs:
+        x, y, w, h, _ = bbox  # 解包边界框
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # 绘制绿色矩形
