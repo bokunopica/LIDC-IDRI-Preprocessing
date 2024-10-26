@@ -1,13 +1,14 @@
 import sys
 import os
-from pathlib import Path
+import cv2
 import glob
-from configparser import ConfigParser
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import warnings
 import pylidc as pl
 from tqdm import tqdm
+from configparser import ConfigParser
 from statistics import median_high
 
 from utils import is_dir_path, segment_lung
@@ -324,6 +325,24 @@ class MakeDataSet:
         print("Saved Meta data")
         self.meta.to_csv(self.meta_path + "meta_info.csv", index=False)
 
+    def mask_find_bboxs(self, mask):
+        retval, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8) # connectivity参数的默认值为8
+        stats = stats[stats[:,4].argsort()]
+        return stats[:-1] # 排除最外层的连通图
+
+
+    def to_object_detection_dataset():
+        pass
+
+
+
+# 获取mask（灰度图）
+mask = cv2.imread(r'\mask.png', cv2.COLOR_BGR2GRAY)
+# 转换成二值图
+ret, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
+
+
+
 
 if __name__ == "__main__":
     # I found out that simply using os.listdir() includes the gitignore file
@@ -342,4 +361,5 @@ if __name__ == "__main__":
         padding,
         confidence_level,
     )
-    test.prepare_dataset(seg_lung=False)
+    # test.prepare_dataset(seg_lung=False)
+    test.to_object_detection_dataset(seg_lung=False)
