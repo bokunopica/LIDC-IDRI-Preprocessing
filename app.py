@@ -2,8 +2,10 @@ import streamlit as st
 import numpy as np
 import os
 
+
+DATA_ROOT = "C:/data/lung-nodules-classification/Processed-LIDC-lung-seg"
 # 根目录
-root_dir = "D:/mycodes/LIDC-IDRI-Preprocessing/data/Image/"
+root_dir = f"{DATA_ROOT}/Image/"
 
 # 获取文件夹列表
 folders = [f for f in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, f))]
@@ -12,7 +14,7 @@ selected_dir = st.selectbox("Select a Dataset", folders)
 # 指定图像文件的目录
 image_dir = os.path.join(root_dir, selected_dir)  # 原始图像目录
 mask_dir = os.path.join(
-    "D:/mycodes/LIDC-IDRI-Preprocessing/data/Mask/", selected_dir
+    f"{DATA_ROOT}/Mask/", selected_dir
 )  # 掩码目录
 
 
