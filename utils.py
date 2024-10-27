@@ -90,3 +90,42 @@ def draw_bboxs(image, bboxs):
     for bbox in bboxs:
         x, y, w, h, _ = bbox  # 解包边界框
         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # 绘制绿色矩形
+
+
+def convert_bbox_to_yolo(bboxs, img_width, img_height, class_id):
+    yolo_bboxes = []
+    
+    for bbox in bboxs:
+        x, y, w, h, _ = bbox  # 解包
+        # 计算中心坐标和宽高的比例
+        x_center = (x + w / 2) / img_width
+        y_center = (y + h / 2) / img_height
+        width = w / img_width
+        height = h / img_height
+        
+        # 生成 YOLO 格式
+        yolo_bbox = [
+            class_id,
+            x_center,
+            y_center,
+            width,
+            height,
+        ]
+        yolo_bboxes.append(yolo_bbox)
+    
+    return yolo_bboxes
+
+
+def yolo_bbox_to_str(yolo_bbox):
+    return f"{yolo_bbox[0]} {round(yolo_bbox[1], 6)} {round(yolo_bbox[2], 6)} {round(yolo_bbox[2], 6)} {round(yolo_bbox[3], 6)}"
+
+
+def normalize_img(img: np.ndarray) -> np.ndarray:
+    img_min = img.min()
+    img_max = img.max()
+
+    if img_max - img_min == 0:  # 避免除以零
+        return np.zeros_like(img)  # 返回全零数组
+
+    # 归一化到 0-1
+    return (img - img_min) / (img_max - img_min)
