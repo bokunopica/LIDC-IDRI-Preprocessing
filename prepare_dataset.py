@@ -1,18 +1,20 @@
 import sys
 import os
-from pathlib import Path
+import cv2
 import glob
-from configparser import ConfigParser
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import warnings
 import pylidc as pl
 from tqdm import tqdm
+from configparser import ConfigParser
 from statistics import median_high
 
-from utils import is_dir_path, segment_lung, ct_img_preprocess
+from utils import (is_dir_path, segment_lung, ct_img_preprocess, mask_find_bboxs, convert_bbox_to_yolo, yolo_bbox_to_str, normalize_img,)
 from pylidc.utils import consensus
 from PIL import Image
+from sklearn.model_selection import train_test_split
 
 warnings.filterwarnings(action="ignore")
 
@@ -324,6 +326,136 @@ class MakeDataSet:
         print("Saved Meta data")
         self.meta.to_csv(self.meta_path + "meta_info.csv", index=False)
 
+    def to_object_detection_dataset(self):
+        """
+        TODO
+        将Images+Mask的图像分割数据集转换为目标检测数据集
+        原始结构:
+        -- DATA_FOLDER
+            -- Clean
+                -- Image
+                -- Mask
+            -- Image
+                -- LIDC-IDRI-0001
+                    -- 0001_NI000_slice000.npy
+                ...
+            -- Mask
+                -- LIDC-IDRI-0001
+                    -- 0001_MA000_slice000.npy
+                ...
+
+        输出结构:
+        -- DATA_FOLDER
+            -- images
+                -- train
+                    -- 000001.jpg
+                    -- 000002.jpg
+                -- val
+                    -- 000003.jpg
+                    -- 000004.jpg
+            -- labels
+                -- train
+                    -- 000001.txt
+                    -- 000002.txt
+                -- val
+                    -- 000003.txt
+                    -- 000004.txt
+        txt文件:
+            45 0.479492 0.688771 0.955609 0.5955
+            类别 [x_center, y_center, w, h]
+
+        yml文件: 自己编写
+        path: ../path/to # dataset root dir
+        train: images/train # train images (relative to 'path') 4 images
+        val: images/val # val images (relative to 'path') 4 images
+        test: # test images (optional)
+
+        # Classes
+        names:
+        0: nodule
+        """
+        # 1. 读取Clean+非Clean的所有folder列表
+        clean_folders = [f for f in os.listdir(self.clean_path_img) if f.startswith('LIDC-IDRI')]
+        mask_folders = [f for f in os.listdir(self.img_path) if f.startswith('LIDC-IDRI') and f not in clean_folders]
+        # 2. 创建保存路径
+        train_img_path = 'LIDC-IDRI-COCO/images/train'
+        train_txt_path = 'LIDC-IDRI-COCO/lables/train'
+        val_img_path = 'LIDC-IDRI-COCO/images/val'
+        val_txt_path = 'LIDC-IDRI-COCO/lables/val'
+        if not os.path.exists(train_txt_path):
+            os.makedirs(train_txt_path)
+        if not os.path.exists(train_img_path):
+            os.makedirs(train_img_path)
+        if not os.path.exists(val_img_path):
+            os.makedirs(val_img_path)
+        if not os.path.exists(val_txt_path):
+            os.makedirs(val_txt_path)
+        # 3. 将image和mask的npy文件处理成为image+txt[bboxs]形式并保存到指定路径
+        # 3.1 train_test_split
+        clean_train, clean_val = train_test_split(clean_folders, random_state=42)
+        mask_train, mask_val = train_test_split(mask_folders, random_state=42)
+        train_folders = mask_train + clean_train
+        val_folders = clean_val + mask_val
+
+        def convert_data(folders, folder_type="train"):
+            if folder_type == "train":
+                save_img_path = train_img_path
+                save_txt_path = train_txt_path
+            else:
+                save_img_path = val_img_path
+                save_txt_path = val_txt_path
+            no_data_folder = []
+            for folder in tqdm(folders):
+                if folder in clean_train:
+                    img_dir = os.path.join(self.clean_path_img, folder)
+                    is_clean = True
+                else:
+                    img_dir = os.path.join(self.img_path, folder)
+                    is_clean = False
+
+                img_npy_list = os.listdir(img_dir)
+                if not img_npy_list:
+                    no_data_folder.append(folder)
+                    print(f"warning: {folder} has no data;is_clean:{is_clean} no_data_count:{len(no_data_folder)}")
+                for img_npy in img_npy_list:
+                    img_filename = img_npy.split('.')[0]
+
+                    # 图片处理
+                    img = np.load(os.path.join(img_dir, img_npy))
+                    normalized_img  = normalize_img(img) # 归一化
+                    img_uint8 = (normalized_img * 255).astype(np.uint8)
+                    Image.fromarray(img_uint8, mode='L').save(f"{save_img_path}/{img_filename}.jpg") #保存图片
+
+                    # 标注处理 -> bounding box
+                    if not is_clean:
+                        mask = np.load(
+                            os.path.join(img_dir, img_npy).replace("Image", "Mask").replace("NI", "MA")
+                        )
+                        bboxs = mask_find_bboxs(mask)
+                        
+                        # 保存标注
+                        with open(f"{save_txt_path}/{img_filename}.txt", 'w') as f:
+                            bboxs = convert_bbox_to_yolo(bboxs,img.shape[0],img.shape[1],class_id=0)
+                            for bbox in bboxs:
+                                f.write(yolo_bbox_to_str(bbox))
+                                f.write('\n')
+                    else:
+                        open(f"{save_txt_path}/{img_filename}.txt", 'w').close() # 仅新建文件 无标注
+            print(no_data_folder)
+
+        convert_data(train_folders, folder_type="train")
+        convert_data(val_folders, folder_type="val")
+
+
+
+
+# 获取mask（灰度图）
+mask = cv2.imread(r'\mask.png', cv2.COLOR_BGR2GRAY)
+# 转换成二值图
+ret, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
+
+
+
 
 if __name__ == "__main__":
     # I found out that simply using os.listdir() includes the gitignore file
@@ -342,4 +474,5 @@ if __name__ == "__main__":
         padding,
         confidence_level,
     )
-    test.prepare_dataset(seg_lung=False)
+    # test.prepare_dataset(seg_lung=False)
+    test.to_object_detection_dataset()

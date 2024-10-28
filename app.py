@@ -1,9 +1,12 @@
-import streamlit as st
-import numpy as np
 import os
+import numpy as np
+import streamlit as st
+from utils import mask_find_bboxs, draw_bboxs
 
+
+DATA_ROOT = "E:/Processed-LIDC-full-lung"
 # 根目录
-root_dir = "D:/mycodes/LIDC-IDRI-Preprocessing/data/Image/"
+root_dir = f"{DATA_ROOT}/Image/"
 
 # 获取文件夹列表
 folders = [f for f in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, f))]
@@ -12,7 +15,7 @@ selected_dir = st.selectbox("Select a Dataset", folders)
 # 指定图像文件的目录
 image_dir = os.path.join(root_dir, selected_dir)  # 原始图像目录
 mask_dir = os.path.join(
-    "D:/mycodes/LIDC-IDRI-Preprocessing/data/Mask/", selected_dir
+    f"{DATA_ROOT}/Mask/", selected_dir
 )  # 掩码目录
 
 
@@ -43,6 +46,8 @@ if selected_dir != st.session_state.get("selected_dir"):
         mask_image = np.load(
             os.path.join(image_dir, path).replace("Image", "Mask").replace("NI", "MA")
         )
+        # mask转为bounding box
+        bboxs = mask_find_bboxs(mask_image)
         # # 创建颜色掩码（假设掩码为二值图像）
         colored_mask = np.zeros((*mask_image.shape, 3), dtype=np.uint8)
         colored_mask[mask_image > 0] = [255, 0, 0]  # 红色掩码
@@ -55,6 +60,8 @@ if selected_dir != st.session_state.get("selected_dir"):
         # # 设置红色掩码的透明度
         # alpha = 128  # 透明度范围 0-255
         # overlay[mask_image > 0] = [255, 0, 0]  # 红色
+        draw_bboxs(colored_mask, bboxs)
+        draw_bboxs(overlay, bboxs)
 
         images.append(image)
         mask_images.append(colored_mask)

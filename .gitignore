@@ -4,3 +4,4 @@ venv
 *.npy
 meta_info.csv
 data/Meta/meta_info.csv
+LIDC-IDRI-COCO
