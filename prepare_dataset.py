@@ -395,7 +395,7 @@ class MakeDataSet:
         clean_train, clean_val = train_test_split(clean_folders, random_state=42)
         mask_train, mask_val = train_test_split(mask_folders, random_state=42)
         train_folders = mask_train + clean_train
-        val_folders = clean_val + mask_val
+        val_folders = mask_val + clean_val
 
         def convert_data(folders, folder_type="train"):
             if folder_type == "train":
@@ -406,7 +406,7 @@ class MakeDataSet:
                 save_txt_path = val_txt_path
             no_data_folder = []
             for folder in tqdm(folders):
-                if folder in clean_train:
+                if folder in clean_train or folder in clean_val:
                     img_dir = os.path.join(self.clean_path_img, folder)
                     is_clean = True
                 else:
@@ -445,14 +445,6 @@ class MakeDataSet:
 
         convert_data(train_folders, folder_type="train")
         convert_data(val_folders, folder_type="val")
-
-
-
-
-# 获取mask（灰度图）
-mask = cv2.imread(r'\mask.png', cv2.COLOR_BGR2GRAY)
-# 转换成二值图
-ret, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
 
 
 
