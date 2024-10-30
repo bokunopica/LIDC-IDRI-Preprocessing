@@ -326,7 +326,7 @@ class MakeDataSet:
         print("Saved Meta data")
         self.meta.to_csv(self.meta_path + "meta_info.csv", index=False)
 
-    def to_object_detection_dataset(self):
+    def to_object_detection_dataset(self, allow_empty=False):
         """
         TODO
         将Images+Mask的图像分割数据集转换为目标检测数据集
@@ -392,10 +392,16 @@ class MakeDataSet:
             os.makedirs(val_txt_path)
         # 3. 将image和mask的npy文件处理成为image+txt[bboxs]形式并保存到指定路径
         # 3.1 train_test_split
-        clean_train, clean_val = train_test_split(clean_folders, random_state=42)
         mask_train, mask_val = train_test_split(mask_folders, random_state=42)
-        train_folders = mask_train + clean_train
-        val_folders = mask_val + clean_val
+        if allow_empty:
+            clean_train, clean_val = train_test_split(clean_folders, random_state=42)
+            train_folders = mask_train + clean_train
+            val_folders = mask_val + clean_val
+        else:
+            train_folders = mask_train
+            val_folders = mask_val
+            
+            
 
         def convert_data(folders, folder_type="train"):
             if folder_type == "train":
