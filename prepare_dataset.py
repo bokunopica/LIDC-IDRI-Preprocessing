@@ -393,8 +393,8 @@ class MakeDataSet:
         # 3. 将image和mask的npy文件处理成为image+txt[bboxs]形式并保存到指定路径
         # 3.1 train_test_split
         mask_train, mask_val = train_test_split(mask_folders, random_state=42)
+        clean_train, clean_val = train_test_split(clean_folders, random_state=42)
         if allow_empty:
-            clean_train, clean_val = train_test_split(clean_folders, random_state=42)
             train_folders = mask_train + clean_train
             val_folders = mask_val + clean_val
         else:
@@ -452,6 +452,22 @@ class MakeDataSet:
         convert_data(train_folders, folder_type="train")
         convert_data(val_folders, folder_type="val")
 
+    def to_2d_classification_dataset(self):
+        # 根据Meta来保存对应的2D图片
+        # 1、读取Meta信息
+        
+        # 2、根据Meta的行->找到npy文件并读取
+        # 3、mask获取锚框对应的那块区域
+        # 4、根据锚框中心选取特定大小的这一片结节图像
+        meta = pd.read_csv(self.meta_path + "meta_info.csv")
+        print(meta)
+        pass
+        
+    
+    def to_3d_classificiation_dataset(self):
+        # 根据Meta来保存对应的3D结构
+        pass
+    
 
 
 
@@ -473,4 +489,5 @@ if __name__ == "__main__":
         confidence_level,
     )
     # test.prepare_dataset(seg_lung=False)
-    test.to_object_detection_dataset()
+    # test.to_object_detection_dataset()
+    test.to_2d_classification_dataset()

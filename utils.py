@@ -145,7 +145,7 @@ def convert_bbox_to_yolo(bboxs, img_width, img_height, class_id):
 
 
 def yolo_bbox_to_str(yolo_bbox):
-    return f"{yolo_bbox[0]} {round(yolo_bbox[1], 6)} {round(yolo_bbox[2], 6)} {round(yolo_bbox[2], 6)} {round(yolo_bbox[3], 6)}"
+    return f"{yolo_bbox[0]} {round(yolo_bbox[1], 6)} {round(yolo_bbox[2], 6)} {round(yolo_bbox[3], 6)} {round(yolo_bbox[4], 6)}"
 
 
 def normalize_img(img: np.ndarray) -> np.ndarray:
