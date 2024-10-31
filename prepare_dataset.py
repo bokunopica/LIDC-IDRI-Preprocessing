@@ -11,7 +11,15 @@ from tqdm import tqdm, trange
 from configparser import ConfigParser
 from statistics import median_high
 
-from utils import (is_dir_path, segment_lung, ct_img_preprocess, mask_find_bboxs, convert_bbox_to_yolo, yolo_bbox_to_str, normalize_img,)
+from utils import (
+    is_dir_path,
+    segment_lung,
+    ct_img_preprocess,
+    mask_find_bboxs,
+    convert_bbox_to_yolo,
+    yolo_bbox_to_str,
+    normalize_img,
+)
 from pylidc.utils import consensus
 from PIL import Image
 from sklearn.model_selection import train_test_split
@@ -222,7 +230,9 @@ class MakeDataSet:
                             )
                             # I am not sure why but some values are stored as -0. <- this may result in datatype error in pytorch training # Not sure
                         else:
-                            lung_segmented_np_array = ct_img_preprocess(lung_np_array[:,:,nodule_slice])
+                            lung_segmented_np_array = ct_img_preprocess(
+                                lung_np_array[:, :, nodule_slice]
+                            )
                         lung_segmented_np_array[lung_segmented_np_array == -0] = 0
                         # This itereates through the slices of a single nodule
                         # Naming of each file: NI= Nodule Image, MA= Mask Original
@@ -270,7 +280,7 @@ class MakeDataSet:
                 Path(patient_clean_dir_mask).mkdir(parents=True, exist_ok=True)
                 # There are patients that don't have nodule at all. Meaning, its a clean dataset. We need to use this for validation
                 for slice in range(vol.shape[2]):
-                    if slice > 50: # 为什么是50？
+                    if slice > 50:  # 为什么是50？
                         break
                     if seg_lung:
                         lung_segmented_np_array = segment_lung(vol[:, :, slice])
@@ -316,7 +326,7 @@ class MakeDataSet:
                         0,
                         0,
                         0,
-                        scan.slice_thickness
+                        scan.slice_thickness,
                     ]
                     self.save_meta(meta_list)
                     np.save(
@@ -375,16 +385,22 @@ class MakeDataSet:
         0: nodule
         """
         # 1. 读取Clean+非Clean的所有folder列表
-        clean_folders = [f for f in os.listdir(self.clean_path_img) if f.startswith('LIDC-IDRI')]
-        mask_folders = [f for f in os.listdir(self.img_path) if f.startswith('LIDC-IDRI') and f not in clean_folders]
+        clean_folders = [
+            f for f in os.listdir(self.clean_path_img) if f.startswith("LIDC-IDRI")
+        ]
+        mask_folders = [
+            f
+            for f in os.listdir(self.img_path)
+            if f.startswith("LIDC-IDRI") and f not in clean_folders
+        ]
         # 2. 创建保存路径
-        root_save_folder = 'LIDC-IDRI-COCO-DET'
+        root_save_folder = "LIDC-IDRI-COCO-DET"
         if allow_empty:
-            root_save_folder+='-WITH-EMPTY' 
-        train_img_path = f'{root_save_folder}/images/train'
-        train_txt_path = f'{root_save_folder}/lables/train'
-        val_img_path = f'{root_save_folder}/images/val'
-        val_txt_path = f'{root_save_folder}/lables/val'
+            root_save_folder += "-WITH-EMPTY"
+        train_img_path = f"{root_save_folder}/images/train"
+        train_txt_path = f"{root_save_folder}/lables/train"
+        val_img_path = f"{root_save_folder}/images/val"
+        val_txt_path = f"{root_save_folder}/lables/val"
         if not os.path.exists(train_txt_path):
             os.makedirs(train_txt_path)
         if not os.path.exists(train_img_path):
@@ -403,7 +419,7 @@ class MakeDataSet:
         else:
             train_folders = mask_train
             val_folders = mask_val
-            
+
         def convert_data(folders, folder_type="train"):
             if folder_type == "train":
                 save_img_path = train_img_path
@@ -421,33 +437,41 @@ class MakeDataSet:
 
                 img_npy_list = os.listdir(img_dir)
                 for img_npy in img_npy_list:
-                    img_filename = img_npy.split('.')[0]
+                    img_filename = img_npy.split(".")[0]
 
                     # 图片处理
                     img = np.load(os.path.join(img_dir, img_npy))
-                    normalized_img  = normalize_img(img) # 归一化
+                    normalized_img = normalize_img(img)  # 归一化
                     img_uint8 = (normalized_img * 255).astype(np.uint8)
-                    Image.fromarray(img_uint8, mode='L').save(f"{save_img_path}/{img_filename}.jpg") #保存图片
+                    Image.fromarray(img_uint8, mode="L").save(
+                        f"{save_img_path}/{img_filename}.jpg"
+                    )  # 保存图片
 
                     # 标注处理 -> bounding box
                     if not is_clean:
                         mask = np.load(
-                            os.path.join(img_dir, img_npy).replace("Image", "Mask").replace("NI", "MA")
+                            os.path.join(img_dir, img_npy)
+                            .replace("Image", "Mask")
+                            .replace("NI", "MA")
                         )
                         bboxs = mask_find_bboxs(mask)
-                        
+
                         # 保存标注
-                        with open(f"{save_txt_path}/{img_filename}.txt", 'w') as f:
-                            bboxs = convert_bbox_to_yolo(bboxs,img.shape[0],img.shape[1],class_id=0)
+                        with open(f"{save_txt_path}/{img_filename}.txt", "w") as f:
+                            bboxs = convert_bbox_to_yolo(
+                                bboxs, img.shape[0], img.shape[1], class_id=0
+                            )
                             for bbox in bboxs:
                                 f.write(yolo_bbox_to_str(bbox))
-                                f.write('\n')
+                                f.write("\n")
                     else:
-                        open(f"{save_txt_path}/{img_filename}.txt", 'w').close() # 仅新建文件 无标注
+                        open(
+                            f"{save_txt_path}/{img_filename}.txt", "w"
+                        ).close()  # 仅新建文件 无标注
 
         convert_data(train_folders, folder_type="train")
         convert_data(val_folders, folder_type="val")
-        
+
     def bbox_stats(self):
         # 所有bbox的统计值
         meta = pd.read_csv(self.meta_path + "meta_info.csv")
@@ -455,12 +479,15 @@ class MakeDataSet:
         bounding_boxes = []
         for index, row in meta.iterrows():
             bar.update(1)
-            if row.is_clean: # 找有结节的图
+            if row.is_clean:  # 找有结节的图
                 continue
-            mask_path = "data/Mask/LIDC-IDRI-%04i/%s.npy" % (row.patient_id, row.mask_image)
+            mask_path = "data/Mask/LIDC-IDRI-%04i/%s.npy" % (
+                row.patient_id,
+                row.mask_image,
+            )
             mask = np.load(mask_path)
             bounding_boxes += mask_find_bboxs(mask).tolist()
-        
+
         # 提取宽度和高度
         widths = [box[2] for box in bounding_boxes]
         heights = [box[3] for box in bounding_boxes]
@@ -481,13 +508,14 @@ class MakeDataSet:
         print(f"Average width: {avg_width}, Average height: {avg_height}")
         print(f"Max width: {max_width}, Max height: {max_height}")
         print(f"Min width: {min_width}, Min height: {min_height}")
-        print(f"Std deviation of width: {std_width}, Std deviation of height: {std_height}")
-                
+        print(
+            f"Std deviation of width: {std_width}, Std deviation of height: {std_height}"
+        )
 
     def to_2d_classification_dataset(self):
         # 根据Meta来保存对应的2D图片
         # 1、读取Meta信息
-        
+
         # 2、根据Meta的行->找到npy文件并读取
         # 3、mask获取锚框对应的那块区域
         # 4、根据锚框中心选取特定大小的这一片结节图像
@@ -504,51 +532,60 @@ class MakeDataSet:
             else:
                 benign_list.append(row)
 
-        train_malignant, test_malignant = train_test_split(malignant_list, random_state=42)
+        train_malignant, test_malignant = train_test_split(
+            malignant_list, random_state=42
+        )
         train_benign, test_benign = train_test_split(benign_list, random_state=42)
 
         def save_data(row, is_train=False):
-            img_path = "data/Image/LIDC-IDRI-%04i/%s.npy" % (row.patient_id, row.original_image)
-            mask_path = "data/Mask/LIDC-IDRI-%04i/%s.npy" % (row.patient_id, row.mask_image)
+            img_path = f"{self.img_path}/LIDC-IDRI-%04i/%s.npy" % (
+                row.patient_id,
+                row.original_image,
+            )
+            mask_path = f"{self.mask_path}/LIDC-IDRI-%04i/%s.npy" % (
+                row.patient_id,
+                row.mask_image,
+            )
             img = np.load(img_path)
             normalized_img = normalize_img(img)  # 归一化
             img_uint8 = (normalized_img * 255).astype(np.uint8)
             mask = np.load(mask_path)
-            
+
             # 找到原始的bounding box
             bboxs = mask_find_bboxs(mask)  # 假设这个函数返回一个列表包含 (x, y, w, h)
-            
+
             for bbox in bboxs:
                 x, y, w, h, _ = bbox
                 cx, cy = x + w // 2, y + h // 2  # 计算中心点
-                
+
                 # 定义新的锚框大小
                 new_size = 96
                 half_size = new_size // 2
-                
+
                 # 计算新的锚框的坐标
                 new_x1 = max(cx - half_size, 0)
                 new_y1 = max(cy - half_size, 0)
                 new_x2 = min(cx + half_size, img_uint8.shape[1])
                 new_y2 = min(cy + half_size, img_uint8.shape[0])
-                
+
                 # 提取新的锚框区域
                 new_bbox = img_uint8[new_y1:new_y2, new_x1:new_x2]
-                
+
                 # 创建一个黑色背景
                 new_img = np.zeros((new_size, new_size), dtype=np.uint8)
-                
+
                 # 将提取的内容放入黑色背景中
-                new_img[max(half_size - cy, 0):max(half_size - cy, 0) + (new_y2 - new_y1),
-                        max(half_size - cx, 0):max(half_size - cx, 0) + (new_x2 - new_x1)] = new_bbox
-                
+                new_img[
+                    max(half_size - cy, 0) : max(half_size - cy, 0) + (new_y2 - new_y1),
+                    max(half_size - cx, 0) : max(half_size - cx, 0) + (new_x2 - new_x1),
+                ] = new_bbox
+
                 # 保存新图像
                 if row.is_cancer == "True" or row.is_cancer == "Ambiguous":
                     output_path = f"LIDC-IDRI-CLASSIFICATION/{'train' if is_train else 'test'}/malignant/{row.original_image}.jpg"
                 else:
-                    output_path = f"LIDC-IDRI-CLASSIFICATION/{'train' if is_train else 'test'}/benign/bbox_{row.original_image}.jpg"
+                    output_path = f"LIDC-IDRI-CLASSIFICATION/{'train' if is_train else 'test'}/benign/{row.original_image}.jpg"
                 cv2.imwrite(output_path, new_img)
-
 
         for i in trange(len(train_malignant)):
             save_data(train_malignant[i], is_train=True)
@@ -559,13 +596,63 @@ class MakeDataSet:
         for i in trange(len(test_benign)):
             save_data(test_benign[i], is_train=False)
 
-                
-    
     def to_3d_classificiation_dataset(self):
         # 根据Meta来保存对应的3D结构
-        pass
-    
+        # 1、读取Meta信息 获取每个结节对应的npy文件
+        # 2、mask获取锚框对应的那块区域
+        # 3、根据锚框中心选取特定大小的这一片结节图像
+        class Nodule(object):
+            def __init__(self, patient_id, nodule_no):
+                self.patient_id = patient_id
+                self.nodule_no = nodule_no
+                self.image_list = []
+                self.mask_list = []
 
+            def __repr__(self):
+                return f"<Nodule-{self.patient_id}-{self.nodule_no}>"
+
+            def add_image(self, image_path, mask_path):
+                self.image_list.append(image_path)
+                self.mask_list.append(mask_path)
+
+            def construct_3d(self):
+                pass
+
+        meta = pd.read_csv(self.meta_path + "meta_info.csv")
+        bar = tqdm(total=len(meta))
+        malignant_list = []
+        benign_list = []
+        unique_values = meta[["patient_id", "nodule_no"]].drop_duplicates()
+        for _, uval in unique_values.iterrows():
+            patient_id = uval.patient_id
+            nodule_no = uval.nodule_no
+            nodule_df = meta[
+                (meta["patient_id"] == patient_id) & (meta["nodule_no"] == nodule_no)
+            ]
+            slice_thickness = nodule_df.slice_thickness.tolist()[0]  # 层厚
+            nodule_obj = Nodule(patient_id, nodule_no)
+
+            for _, row in nodule_df.iterrows():
+                img_path = f"{self.img_path}/LIDC-IDRI-%04i/%s.npy" % (
+                    row.patient_id,
+                    row.original_image,
+                )
+                mask_path = f"{self.mask_path}/LIDC-IDRI-%04i/%s.npy" % (
+                    row.patient_id,
+                    row.mask_image,
+                )
+                nodule_obj.add_image(img_path, mask_path)
+            break
+
+        # print(unique_values)
+        # for index, row in meta.iterrows():
+        #     bar.update(1)
+        #     if row.is_clean:  # 跳过没有结节的图像
+        #         continue
+        #     if row.is_cancer == "True" or row.is_cancer == "Ambiguous":
+        #         malignant_list.append(row)
+        #     else:
+        #         benign_list.append(row)
 
 
 if __name__ == "__main__":
@@ -587,5 +674,6 @@ if __name__ == "__main__":
     )
     # test.prepare_dataset(seg_lung=False)
     # test.to_object_detection_dataset(allow_empty=True)
-    test.to_2d_classification_dataset()
+    # test.to_2d_classification_dataset()
     # test.bbox_stats()
+    test.to_3d_classificiation_dataset()
