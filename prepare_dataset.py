@@ -378,10 +378,13 @@ class MakeDataSet:
         clean_folders = [f for f in os.listdir(self.clean_path_img) if f.startswith('LIDC-IDRI')]
         mask_folders = [f for f in os.listdir(self.img_path) if f.startswith('LIDC-IDRI') and f not in clean_folders]
         # 2. 创建保存路径
-        train_img_path = 'LIDC-IDRI-COCO/images/train'
-        train_txt_path = 'LIDC-IDRI-COCO/lables/train'
-        val_img_path = 'LIDC-IDRI-COCO/images/val'
-        val_txt_path = 'LIDC-IDRI-COCO/lables/val'
+        root_save_folder = 'LIDC-IDRI-COCO-DET'
+        if allow_empty:
+            root_save_folder+='-WITH-EMPTY' 
+        train_img_path = f'{root_save_folder}/images/train'
+        train_txt_path = f'{root_save_folder}/lables/train'
+        val_img_path = f'{root_save_folder}/images/val'
+        val_txt_path = f'{root_save_folder}/lables/val'
         if not os.path.exists(train_txt_path):
             os.makedirs(train_txt_path)
         if not os.path.exists(train_img_path):
@@ -401,8 +404,6 @@ class MakeDataSet:
             train_folders = mask_train
             val_folders = mask_val
             
-            
-
         def convert_data(folders, folder_type="train"):
             if folder_type == "train":
                 save_img_path = train_img_path
@@ -410,7 +411,6 @@ class MakeDataSet:
             else:
                 save_img_path = val_img_path
                 save_txt_path = val_txt_path
-            no_data_folder = []
             for folder in tqdm(folders):
                 if folder in clean_train or folder in clean_val:
                     img_dir = os.path.join(self.clean_path_img, folder)
@@ -420,9 +420,6 @@ class MakeDataSet:
                     is_clean = False
 
                 img_npy_list = os.listdir(img_dir)
-                if not img_npy_list:
-                    no_data_folder.append(folder)
-                    print(f"warning: {folder} has no data;is_clean:{is_clean} no_data_count:{len(no_data_folder)}")
                 for img_npy in img_npy_list:
                     img_filename = img_npy.split('.')[0]
 
@@ -447,10 +444,45 @@ class MakeDataSet:
                                 f.write('\n')
                     else:
                         open(f"{save_txt_path}/{img_filename}.txt", 'w').close() # 仅新建文件 无标注
-            print(no_data_folder)
 
         convert_data(train_folders, folder_type="train")
         convert_data(val_folders, folder_type="val")
+        
+    def bbox_stats(self):
+        # 所有bbox的统计值
+        meta = pd.read_csv(self.meta_path + "meta_info.csv")
+        bar = tqdm(total=len(meta))
+        bounding_boxes = []
+        for index, row in meta.iterrows():
+            bar.update(1)
+            if row.is_clean: # 找有结节的图
+                continue
+            mask_path = "data/Mask/LIDC-IDRI-%04i/%s.npy" % (row.patient_id, row.mask_image)
+            mask = np.load(mask_path)
+            bounding_boxes += mask_find_bboxs(mask).tolist()
+        
+        # 提取宽度和高度
+        widths = [box[2] for box in bounding_boxes]
+        heights = [box[3] for box in bounding_boxes]
+
+        # 统计值
+        num_boxes = len(bounding_boxes)
+        avg_width = np.mean(widths)
+        avg_height = np.mean(heights)
+        max_width = np.max(widths)
+        max_height = np.max(heights)
+        min_width = np.min(widths)
+        min_height = np.min(heights)
+        std_width = np.std(widths)
+        std_height = np.std(heights)
+
+        # 打印结果
+        print(f"Total bounding boxes: {num_boxes}")
+        print(f"Average width: {avg_width}, Average height: {avg_height}")
+        print(f"Max width: {max_width}, Max height: {max_height}")
+        print(f"Min width: {min_width}, Min height: {min_height}")
+        print(f"Std deviation of width: {std_width}, Std deviation of height: {std_height}")
+                
 
     def to_2d_classification_dataset(self):
         # 根据Meta来保存对应的2D图片
@@ -460,8 +492,53 @@ class MakeDataSet:
         # 3、mask获取锚框对应的那块区域
         # 4、根据锚框中心选取特定大小的这一片结节图像
         meta = pd.read_csv(self.meta_path + "meta_info.csv")
-        print(meta)
-        pass
+        bar = tqdm(total=len(meta))
+        for index, row in meta.iterrows():
+            bar.update(1)
+            if row.is_clean:  # 跳过没有结节的图像
+                continue
+    
+            img_path = "data/Image/LIDC-IDRI-%04i/%s.npy" % (row.patient_id, row.original_image)
+            mask_path = "data/Mask/LIDC-IDRI-%04i/%s.npy" % (row.patient_id, row.mask_image)
+            
+            img = np.load(img_path)
+            normalized_img = normalize_img(img)  # 归一化
+            img_uint8 = (normalized_img * 255).astype(np.uint8)
+            mask = np.load(mask_path)
+            
+            # 找到原始的bounding box
+            bboxs = mask_find_bboxs(mask)  # 假设这个函数返回一个列表包含 (x, y, w, h)
+            
+            for bbox in bboxs:
+                x, y, w, h, _ = bbox
+                cx, cy = x + w // 2, y + h // 2  # 计算中心点
+                
+                # 定义新的锚框大小
+                new_size = 96
+                half_size = new_size // 2
+                
+                # 计算新的锚框的坐标
+                new_x1 = max(cx - half_size, 0)
+                new_y1 = max(cy - half_size, 0)
+                new_x2 = min(cx + half_size, img_uint8.shape[1])
+                new_y2 = min(cy + half_size, img_uint8.shape[0])
+                
+                # 提取新的锚框区域
+                new_bbox = img_uint8[new_y1:new_y2, new_x1:new_x2]
+                
+                # 创建一个黑色背景
+                new_img = np.zeros((new_size, new_size), dtype=np.uint8)
+                
+                # 将提取的内容放入黑色背景中
+                new_img[max(half_size - cy, 0):max(half_size - cy, 0) + (new_y2 - new_y1),
+                        max(half_size - cx, 0):max(half_size - cx, 0) + (new_x2 - new_x1)] = new_bbox
+                
+                # 保存新图像
+                if row.is_cancer == "True" or row.is_cancer == "Ambiguous":
+                    output_path = f"LIDC-IDRI-CLASSIFICATION/malignant/{row.original_image}.jpg"
+                else:
+                    output_path = f"LIDC-IDRI-CLASSIFICATION/benign/bbox_{row.original_image}.jpg"
+                cv2.imwrite(output_path, new_img)
         
     
     def to_3d_classificiation_dataset(self):
@@ -489,5 +566,6 @@ if __name__ == "__main__":
         confidence_level,
     )
     # test.prepare_dataset(seg_lung=False)
-    # test.to_object_detection_dataset()
+    # test.to_object_detection_dataset(allow_empty=True)
     test.to_2d_classification_dataset()
+    # test.bbox_stats()
