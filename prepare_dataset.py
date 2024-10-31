@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import warnings
 import pylidc as pl
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from configparser import ConfigParser
 from statistics import median_high
 
@@ -493,14 +493,23 @@ class MakeDataSet:
         # 4、根据锚框中心选取特定大小的这一片结节图像
         meta = pd.read_csv(self.meta_path + "meta_info.csv")
         bar = tqdm(total=len(meta))
+        malignant_list = []
+        benign_list = []
         for index, row in meta.iterrows():
             bar.update(1)
             if row.is_clean:  # 跳过没有结节的图像
                 continue
-    
+            if row.is_cancer == "True" or row.is_cancer == "Ambiguous":
+                malignant_list.append(row)
+            else:
+                benign_list.append(row)
+
+        train_malignant, test_malignant = train_test_split(malignant_list, random_state=42)
+        train_benign, test_benign = train_test_split(benign_list, random_state=42)
+
+        def save_data(row, is_train=False):
             img_path = "data/Image/LIDC-IDRI-%04i/%s.npy" % (row.patient_id, row.original_image)
             mask_path = "data/Mask/LIDC-IDRI-%04i/%s.npy" % (row.patient_id, row.mask_image)
-            
             img = np.load(img_path)
             normalized_img = normalize_img(img)  # 归一化
             img_uint8 = (normalized_img * 255).astype(np.uint8)
@@ -535,11 +544,22 @@ class MakeDataSet:
                 
                 # 保存新图像
                 if row.is_cancer == "True" or row.is_cancer == "Ambiguous":
-                    output_path = f"LIDC-IDRI-CLASSIFICATION/malignant/{row.original_image}.jpg"
+                    output_path = f"LIDC-IDRI-CLASSIFICATION/{'train' if is_train else 'test'}/malignant/{row.original_image}.jpg"
                 else:
-                    output_path = f"LIDC-IDRI-CLASSIFICATION/benign/bbox_{row.original_image}.jpg"
+                    output_path = f"LIDC-IDRI-CLASSIFICATION/{'train' if is_train else 'test'}/benign/bbox_{row.original_image}.jpg"
                 cv2.imwrite(output_path, new_img)
-        
+
+
+        for i in trange(len(train_malignant)):
+            save_data(train_malignant[i], is_train=True)
+        for i in trange(len(test_malignant)):
+            save_data(test_malignant[i], is_train=False)
+        for i in trange(len(train_benign)):
+            save_data(train_benign[i], is_train=True)
+        for i in trange(len(test_benign)):
+            save_data(test_benign[i], is_train=False)
+
+                
     
     def to_3d_classificiation_dataset(self):
         # 根据Meta来保存对应的3D结构
