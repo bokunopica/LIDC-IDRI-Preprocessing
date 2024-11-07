@@ -602,9 +602,11 @@ class MakeDataSet:
         # 2、mask获取锚框对应的那块区域
         # 3、根据锚框中心选取特定大小的这一片结节图像
         class Nodule(object):
-            def __init__(self, patient_id, nodule_no):
-                self.patient_id = patient_id
-                self.nodule_no = nodule_no
+            def __init__(self, patient_id, nodule_no, slice_thickness):
+                # 患者id+结节id 是唯一id
+                self.patient_id = patient_id # 患者id
+                self.nodule_no = nodule_no # 结节id 
+                self.slice_thickness = slice_thickness # 层厚
                 self.image_list = []
                 self.mask_list = []
 
@@ -614,23 +616,146 @@ class MakeDataSet:
             def add_image(self, image_path, mask_path):
                 self.image_list.append(image_path)
                 self.mask_list.append(mask_path)
+                
+            def get_3d_stats(self):
+                # 统计阶段
+                # 1、获取所有mask的bbox
+                masks = [np.load(mask) for mask in self.mask_list]
+                # 2、根据bboxs获取x_min, y_min, x_max, y_max
+                bbox = mask_find_bboxs(masks[0])[0]
+                g_x_min, g_y_min, w, h, _ = bbox
+                g_x_max = g_x_min+w
+                g_y_max = g_y_min+h
+                
+                for mask in masks[1:]:
+                    bbox = mask_find_bboxs(mask)[0]
+                    x_min, y_min, w, h, _ = bbox
+                    x_max = x_min + w
+                    y_max = y_min + h
+                    if x_min<g_x_min: g_x_min = x_min
+                    if x_max>g_x_max: g_x_max = x_max
+                    if y_min<g_y_min: g_y_min = y_min
+                    if y_max>g_y_max: g_y_max = y_max
+                
+                w_max, h_max = g_x_max - g_x_min, g_y_max - g_y_min
+                z = self.slice_thickness * len(self.mask_list)
+                return w_max, h_max, z
+            
+            @classmethod
+            def extract_bbox_region(cls, image, bbox):
+                """ 提取指定 bbox 区域的内容 """
+                x, y, w, h = bbox
+                return image[y:y+h, x:x+w]
+
+            @classmethod
+            def align_and_stack_bboxes_to_3d(cls, images, bboxes, target_size=None):
+                """
+                将不同大小和位置的 bbox 区域对齐并堆叠成 3D 图像。
+                
+                images: List of 2D images
+                bboxes: List of bbox tuples (x, y, w, h)
+                target_size: (height, width) 目标大小，所有 bbox 区域将被缩放为这个大小
+                """
+                
+                # 如果没有指定目标大小，则选择最大宽度和高度作为目标大小
+                if target_size is None:
+                    max_width = max([bbox[2] for bbox in bboxes])
+                    max_height = max([bbox[3] for bbox in bboxes])
+                    target_size = (max_height, max_width)
+
+                # 创建一个空的 3D 图像，深度等于图像数量，宽度和高度为目标大小
+                depth = len(images)
+                height, width = target_size
+                stacked_image = np.zeros((depth, height, width), dtype=np.uint8)  # 3D 图像（灰度图）
+
+                # 遍历所有图像和它们的 bbox
+                for i, (image, bbox) in enumerate(zip(images, bboxes)):
+                    x, y, w, h = bbox
+
+                    # 提取每个图像的 bbox 区域
+                    region = self.extract_bbox_region(image, bbox)
+
+                    # 如果需要，将区域缩放为目标大小
+                    region_resized = cv2.resize(region, (width, height))
+
+                    # 将处理后的区域放入 3D 图像中
+                    stacked_image[i] = region_resized
+
+                return stacked_image
 
             def construct_3d(self):
+                """
+                根据image和mask 还有层厚构建3d对象
+                """
+                # 统计阶段
+                # 1、获取所有mask和images
+                print(self.mask_list)
+                print(self.image_list)
+                print(self.patient_id)
+                print(self.nodule_no)
+                print(self.slice_thickness)
+                masks = [np.load(mask) for mask in self.mask_list]
+                images = [np.load(img) for img in self.image_list]
+                # 2、根据mask计算bbox并截取图片
+                
+
+                # 找到原始的bounding box
+                # bboxs = mask_find_bboxs(mask)  # 假设这个函数返回一个列表包含 (x, y, w, h)
                 pass
+            
+            @property
+            def z_length(self):
+                return self.slice_thickness*len(self.mask_list)
+            
+        def calc_stats(value_list, print_name):
+            print(f'----{print_name}----')
+            print(f'min: {min(value_list)}')
+            print(f'max: {max(value_list)}')
+            print(f'avg: {sum(value_list)/len(value_list)}')
+            
+            
+        def calc_nodule_z_stat(nodule_list):
+            """
+            计算nodule在z轴的一些统计量
+            """
+            z_list = []
+            slices_list = []
+            for nodule_obj in nodule_list:
+                z_list.append(nodule_obj.z_length)
+                slices_list.append(len(nodule_obj.mask_list))
+                
+            print('z-length')
+            print(f'min: {min(z_list)}')
+            print(f'max: {max(z_list)}')
+            print(f'avg: {sum(z_list)/len(z_list)}')
+            
+            print('slices_list')
+            print(f'min: {min(slices_list)}')
+            print(f'max: {max(slices_list)}')
+            print(f'avg: {sum(slices_list)/len(slices_list)}')
+            
 
         meta = pd.read_csv(self.meta_path + "meta_info.csv")
-        bar = tqdm(total=len(meta))
-        malignant_list = []
-        benign_list = []
+        all_nodules = []
+        malignant_nodules = []
+        benign_nodules = []
         unique_values = meta[["patient_id", "nodule_no"]].drop_duplicates()
+        bar = tqdm(total=len(unique_values))
+        # stats_list = []
+        
         for _, uval in unique_values.iterrows():
+            bar.update(1)
             patient_id = uval.patient_id
             nodule_no = uval.nodule_no
             nodule_df = meta[
                 (meta["patient_id"] == patient_id) & (meta["nodule_no"] == nodule_no)
             ]
             slice_thickness = nodule_df.slice_thickness.tolist()[0]  # 层厚
-            nodule_obj = Nodule(patient_id, nodule_no)
+            is_cancer = True if nodule_df.is_cancer.tolist()[0] in ["True", "Ambiguous"] else False
+            is_clean = nodule_df.is_clean.tolist()[0]
+            if is_clean:
+                continue
+            nodule_obj = Nodule(patient_id, nodule_no, slice_thickness)
 
             for _, row in nodule_df.iterrows():
                 img_path = f"{self.img_path}/LIDC-IDRI-%04i/%s.npy" % (
@@ -642,17 +767,31 @@ class MakeDataSet:
                     row.mask_image,
                 )
                 nodule_obj.add_image(img_path, mask_path)
+                
+            nodule_obj.construct_3d()
             break
+            # stats_list.append(nodule_obj.get_3d_stats())
+            all_nodules.append(nodule_obj)
+            if is_cancer:
+                malignant_nodules.append(nodule_obj)
+            else:
+                benign_nodules.append(nodule_obj)
+                
 
-        # print(unique_values)
-        # for index, row in meta.iterrows():
-        #     bar.update(1)
-        #     if row.is_clean:  # 跳过没有结节的图像
-        #         continue
-        #     if row.is_cancer == "True" or row.is_cancer == "Ambiguous":
-        #         malignant_list.append(row)
-        #     else:
-        #         benign_list.append(row)
+        ############## 数据统计 ##############
+        # print('unique-slice-thickness')
+        # print(list(set([_.slice_thickness for _ in all_nodules])))
+        # print('------all------')
+        # calc_nodule_z_stat(all_nodules)
+        # print('------malignant------')
+        # calc_nodule_z_stat(malignant_nodules)
+        # print('------benign------')
+        # calc_nodule_z_stat(benign_nodules)
+        # calc_stats([stat[0] for stat in stats_list], 'w')
+        # calc_stats([stat[1] for stat in stats_list], 'h')
+        # calc_stats([stat[2] for stat in stats_list], 'z')
+        
+        
 
 
 if __name__ == "__main__":
